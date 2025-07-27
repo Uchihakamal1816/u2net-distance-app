@@ -2,42 +2,76 @@ import streamlit as st
 from PIL import Image
 from u2net_model import BackgroundRemovalModel
 from distance_calc import calculate_distance
-import tempfile
+import io
 
-st.title("🖼️ U²-Net Background Removal + Distance Measurement")
+# ---------------------------
+# Load U²-Net model
+# ---------------------------
+st.set_page_config(page_title="U²-Net Distance Estimation", layout="centered")
+st.title("📏 Background Removal + Object Distance Calculator")
 
-# Sidebar inputs
-st.sidebar.header("Camera Parameters")
-image_resolution = st.sidebar.text_input("Image Resolution (width,height)", "4096,3073")
-sensor_size = st.sidebar.text_input("Sensor Size in mm (width,height)", "7.4,5.55")
-focal_length = st.sidebar.number_input("Focal Length (mm)", 5.5)
-object_distance = st.sidebar.number_input("Object Distance (mm)", 300)
+# Load model
+@st.cache_resource
+def load_model():
+    return BackgroundRemovalModel(model_path="u2net_best.pth")
 
-uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
+model = load_model()
 
-if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
-    st.image(img, caption="Uploaded Image", use_column_width=True)
+# ---------------------------
+# File Upload
+# ---------------------------
+uploaded_file = st.file_uploader("Upload an Image", type=["png", "jpg", "jpeg"])
 
-    # Load Model
-    st.write("Running U²-Net background removal...")
-    model = BackgroundRemovalModel(model_path="u2net_best.pth")
-    result = model.remove_background(uploaded_file)
+# ---------------------------
+# Camera Parameters
+# ---------------------------
+st.subheader("Camera Parameters")
+col1, col2 = st.columns(2)
 
-    st.image(result, caption="Background Removed", use_column_width=True)
+with col1:
+    image_width = st.number_input("Image Width (px)", value=4096)
+    sensor_width = st.number_input("Sensor Width (mm)", value=7.4)
+    focal_length = st.number_input("Focal Length (mm)", value=5.5)
 
-    # Save to temp and calculate distance
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-        result.save(tmp.name)
-        res = tuple(map(int, image_resolution.split(",")))
-        sensor = tuple(map(float, sensor_size.split(",")))
+with col2:
+    image_height = st.number_input("Image Height (px)", value=3073)
+    sensor_height = st.number_input("Sensor Height (mm)", value=5.55)
+    object_distance = st.number_input("Object Distance (mm)", value=300)
 
-        height_mm, height_cm = calculate_distance(
-            image=result,
-            image_resolution=res,
-            sensor_size_mm=sensor,
+# ---------------------------
+# Process Button
+# ---------------------------
+if uploaded_file and st.button("Process Image"):
+    with st.spinner("Processing image..."):
+        # Convert to PIL image
+        image = Image.open(uploaded_file).convert("RGB")
+
+        # Background removal
+        result_img = model.remove_background(image)
+
+        # Calculate real-world height
+        real_height_mm, adjusted_height_mm, height_px = calculate_distance(
+            image=image,
+            image_resolution=(image_width, image_height),
+            sensor_size_mm=(sensor_width, sensor_height),
             focal_length_mm=focal_length,
             object_distance_mm=object_distance
         )
 
-        st.success(f"Estimated Object Height: {height_cm:.2f} cm")
+    # Show results
+    st.success("✅ Processing Complete!")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(image, caption="Original Image", use_column_width=True)
+    with col2:
+        st.image(result_img, caption="Background Removed (RGBA)", use_column_width=True)
+
+    st.markdown(f"### Results:")
+    st.write(f"- Object Height (pixels): **{height_px:.2f} px**")
+    st.write(f"- Real Height (before tilt): **{real_height_mm:.2f} mm**")
+    st.write(f"- Real Height (adjusted): **{adjusted_height_mm:.2f} mm ({adjusted_height_mm/10:.2f} cm)**")
+
+    # Download button
+    img_byte_arr = io.BytesIO()
+    result_img.save(img_byte_arr, format='PNG')
+    st.download_button("Download Processed Image", img_byte_arr.getvalue(), file_name="output.png", mime="image/png")
