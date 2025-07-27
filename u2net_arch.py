@@ -16,9 +16,8 @@ class REBNCONV(nn.Module):
         hx = self.relu_s1(hx)
         return hx
 
-
-# --------- Residual U-Block (RSU7) ----------
-class RSU7(nn.Module):
+# --------- Residual U-Blocks (RSU7 everywhere) ----------
+class RSU7(nn.Module):  # U-block with 7 layers
     def __init__(self, in_ch=3, mid_ch=12, out_ch=3):
         super(RSU7, self).__init__()
 
@@ -89,8 +88,7 @@ class RSU7(nn.Module):
 
         return hx1d + hxin
 
-
-# --------- U²-Net RSU7 Version ----------
+# --------- U²-Net Main Architecture ----------
 class U2NET(nn.Module):
     def __init__(self, in_ch=3, out_ch=1):
         super(U2NET, self).__init__()
@@ -155,6 +153,6 @@ class U2NET(nn.Module):
 
         return d0, d1, d2, d3, d4, d5, d6
 
-
+# --------- Utility for upsampling ----------
 def _upsample_like(src, tar):
     return F.interpolate(src, size=tar.shape[2:], mode='bilinear', align_corners=False)
