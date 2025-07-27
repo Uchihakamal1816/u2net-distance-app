@@ -16,8 +16,9 @@ class REBNCONV(nn.Module):
         hx = self.relu_s1(hx)
         return hx
 
-# --------- Residual U-Blocks (RSU7 everywhere) ----------
-class RSU7(nn.Module):  # U-block with 7 layers
+
+# --------- Residual U-Block (RSU7) ----------
+class RSU7(nn.Module):
     def __init__(self, in_ch=3, mid_ch=12, out_ch=3):
         super(RSU7, self).__init__()
 
@@ -88,7 +89,8 @@ class RSU7(nn.Module):  # U-block with 7 layers
 
         return hx1d + hxin
 
-# --------- U²-Net Main Architecture ----------
+
+# --------- U²-Net RSU7 Version ----------
 class U2NET(nn.Module):
     def __init__(self, in_ch=3, out_ch=1):
         super(U2NET, self).__init__()
@@ -116,7 +118,7 @@ class U2NET(nn.Module):
         self.side5 = nn.Conv2d(512, out_ch, 3, padding=1)
         self.side6 = nn.Conv2d(512, out_ch, 3, padding=1)
 
-        self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
+        self.outconv = nn.Conv2d(6*out_ch, out_ch, 1)
 
     def forward(self, x):
         hx1 = self.stage1(x)
@@ -143,18 +145,16 @@ class U2NET(nn.Module):
         d5 = self.side5(hx5)
         d6 = self.side6(hx6)
 
-        # ✅ Upsample all to input size
-        d1 = _upsample_like(d1, x)
-        d2 = _upsample_like(d2, x)
-        d3 = _upsample_like(d3, x)
-        d4 = _upsample_like(d4, x)
-        d5 = _upsample_like(d5, x)
-        d6 = _upsample_like(d6, x)
+        d2 = _upsample_like(d2, d1)
+        d3 = _upsample_like(d3, d1)
+        d4 = _upsample_like(d4, d1)
+        d5 = _upsample_like(d5, d1)
+        d6 = _upsample_like(d6, d1)
 
         d0 = self.outconv(torch.cat((d1, d2, d3, d4, d5, d6), 1))
 
         return d0, d1, d2, d3, d4, d5, d6
 
-# --------- Utility for upsampling ----------
+
 def _upsample_like(src, tar):
     return F.interpolate(src, size=tar.shape[2:], mode='bilinear', align_corners=False)
