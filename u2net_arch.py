@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ConvBlock, self).__init__()
@@ -18,24 +17,19 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         return self.block(x)
 
-# ------------------------
-#   RSU Block (Residual U-Block)
-# ------------------------
 class RSU(nn.Module):
     def __init__(self, height, in_ch, mid_ch, out_ch):
         super(RSU, self).__init__()
         self.height = height
-
         self.in_conv = ConvBlock(in_ch, out_ch)
         self.enc_blocks = nn.ModuleList()
         self.pool = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
         # Encoder path
         for i in range(height - 1):
-            if i == 0:
-                self.enc_blocks.append(ConvBlock(out_ch, mid_ch))
-            else:
-                self.enc_blocks.append(ConvBlock(mid_ch, mid_ch))
+            self.enc_blocks.append(
+                ConvBlock(out_ch if i == 0 else mid_ch, mid_ch)
+            )
 
         # Bottom
         self.bottom = ConvBlock(mid_ch, mid_ch)
@@ -56,7 +50,7 @@ class RSU(nn.Module):
         for i, block in enumerate(self.enc_blocks):
             hx = block(hx)
             enc_feats.append(hx)
-            if i < len(self.enc_blocks) - 1:
+            if i < self.height - 2:  # Don't pool after last encoder block
                 hx = self.pool(hx)
 
         # Bottom
@@ -65,18 +59,19 @@ class RSU(nn.Module):
         # Decoder
         for i, block in enumerate(self.dec_blocks):
             skip = enc_feats[-(i + 1)]
-            hx = F.interpolate(hx, size=skip.shape[2:], mode="bilinear", align_corners=False)
+            hx = F.interpolate(hx, size=skip.shape[2:], 
+                              mode='bilinear', 
+                              align_corners=True)  # Changed to True for consistency
             hx = torch.cat([hx, skip], dim=1)
             hx = block(hx)
 
         # Output
-        hx = F.interpolate(hx, size=x_in.shape[2:], mode="bilinear", align_corners=False)
+        hx = F.interpolate(hx, size=x_in.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
         hx = torch.cat([hx, x_in], dim=1)
         return self.out_conv(hx)
 
-# ------------------------
-#   U²-Net Model
-# ------------------------
 class U2NET(nn.Module):
     def __init__(self, in_ch=3, out_ch=1):
         super(U2NET, self).__init__()
@@ -137,7 +132,9 @@ class U2NET(nn.Module):
 
         # Decoder
         def cat_and_resize(a, b):
-            a = F.interpolate(a, size=b.shape[2:], mode="bilinear", align_corners=False)
+            a = F.interpolate(a, size=b.shape[2:], 
+                            mode='bilinear', 
+                            align_corners=True)
             return torch.cat([a, b], dim=1)
 
         hx5d = self.stage5d(cat_and_resize(hx6, hx5))
@@ -148,11 +145,26 @@ class U2NET(nn.Module):
 
         # Side Outputs
         d1 = self.side1(hx1d)
-        d2 = F.interpolate(self.side2(hx2d), size=d1.shape[2:], mode="bilinear", align_corners=False)
-        d3 = F.interpolate(self.side3(hx3d), size=d1.shape[2:], mode="bilinear", align_corners=False)
-        d4 = F.interpolate(self.side4(hx4d), size=d1.shape[2:], mode="bilinear", align_corners=False)
-        d5 = F.interpolate(self.side5(hx5d), size=d1.shape[2:], mode="bilinear", align_corners=False)
-        d6 = F.interpolate(self.side6(hx6), size=d1.shape[2:], mode="bilinear", align_corners=False)
+        d2 = F.interpolate(self.side2(hx2d), 
+                          size=d1.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
+        d3 = F.interpolate(self.side3(hx3d), 
+                          size=d1.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
+        d4 = F.interpolate(self.side4(hx4d), 
+                          size=d1.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
+        d5 = F.interpolate(self.side5(hx5d), 
+                          size=d1.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
+        d6 = F.interpolate(self.side6(hx6), 
+                          size=d1.shape[2:], 
+                          mode='bilinear', 
+                          align_corners=True)
 
         # Final fused output
         d0 = self.outconv(torch.cat([d1, d2, d3, d4, d5, d6], dim=1))
