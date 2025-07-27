@@ -11,16 +11,17 @@ class REBNCONV(nn.Module):
         self.relu_s1 = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        hx = x
-        hx = self.conv_s1(hx)
+        hx = self.conv_s1(x)
         hx = self.bn_s1(hx)
         hx = self.relu_s1(hx)
         return hx
 
-# --------- Residual U-Blocks ----------
-class RSU7(nn.Module):  # UNet stage with 7 layers
+
+# --------- Residual U-Blocks (RSU7 everywhere) ----------
+class RSU7(nn.Module):  # U-block with 7 layers
     def __init__(self, in_ch=3, mid_ch=12, out_ch=3):
         super(RSU7, self).__init__()
+
         self.rebnconvin = REBNCONV(in_ch, out_ch)
 
         self.rebnconv1 = REBNCONV(out_ch, mid_ch)
@@ -49,8 +50,7 @@ class RSU7(nn.Module):  # UNet stage with 7 layers
         self.rebnconv1d = REBNCONV(mid_ch*2, out_ch)
 
     def forward(self, x):
-        hx = x
-        hxin = self.rebnconvin(hx)
+        hxin = self.rebnconvin(x)
 
         hx1 = self.rebnconv1(hxin)
         hx = self.pool1(hx1)
@@ -68,7 +68,6 @@ class RSU7(nn.Module):  # UNet stage with 7 layers
         hx = self.pool5(hx5)
 
         hx6 = self.rebnconv6(hx)
-
         hx7 = self.rebnconv7(hx6)
 
         hx6d = self.rebnconv6d(torch.cat((hx7, hx6), 1))
@@ -90,7 +89,8 @@ class RSU7(nn.Module):  # UNet stage with 7 layers
 
         return hx1d + hxin
 
-# U²-Net model
+
+# --------- U²-Net Main Architecture ----------
 class U2NET(nn.Module):
     def __init__(self, in_ch=3, out_ch=1):
         super(U2NET, self).__init__()
@@ -118,7 +118,7 @@ class U2NET(nn.Module):
         self.side5 = nn.Conv2d(512, out_ch, 3, padding=1)
         self.side6 = nn.Conv2d(512, out_ch, 3, padding=1)
 
-        self.outconv = nn.Conv2d(6*out_ch, out_ch, 1)
+        self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
 
     def forward(self, x):
         hx1 = self.stage1(x)
@@ -149,6 +149,7 @@ class U2NET(nn.Module):
 
         return d0, d1, d2, d3, d4, d5, d6
 
-# Utility function
+
+# --------- Utility for upsampling ----------
 def _upsample_like(src, tar):
     return F.interpolate(src, size=tar.shape[2:], mode='bilinear', align_corners=False)
